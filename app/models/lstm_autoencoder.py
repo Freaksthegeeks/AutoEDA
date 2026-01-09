@@ -68,19 +68,25 @@ class LSTMAutoencoder:
         try:
             # Input layer
             input_layer = layers.Input(shape=self.input_shape)
-            
-            # Encoder
+
+            # Encoder model
             self.encoder = self._build_encoder(input_layer)
-            
-            # Decoder
-            self.decoder = self._build_decoder(self.encoder.output)
-            
-            # Autoencoder (encoder + decoder)
-            self.autoencoder = Model(inputs=input_layer, outputs=self.decoder)
-            
+
+            # Build decoder as a separate Model that accepts the encoder output as input
+            decoder_input = layers.Input(shape=self.encoder.output_shape[1:])
+            decoder_output = self._build_decoder(decoder_input)
+            decoder_model = Model(inputs=decoder_input, outputs=decoder_output, name='decoder')
+
+            # Autoencoder connects encoder -> decoder
+            autoencoder_output = decoder_model(self.encoder.output)
+            self.autoencoder = Model(inputs=input_layer, outputs=autoencoder_output)
+
+            # Assign decoder model
+            self.decoder = decoder_model
+
             # Compile model
             self._compile_model()
-            
+
             logger.info("LSTM Autoencoder model built successfully")
             
         except Exception as e:
@@ -170,7 +176,7 @@ class LSTMAutoencoder:
         logger.info(f"Model compiled with optimizer: {self.config['optimizer']}, "
                    f"learning rate: {self.config['learning_rate']}")
     
-    def train(self, data, epochs=50, batch_size=32, validation_split=0.2, 
+    def train(self, data, epochs=10, batch_size=32, validation_split=0.2, 
               callbacks_list=None, verbose=1):
         """
         Train the autoencoder model
@@ -188,6 +194,9 @@ class LSTMAutoencoder:
         """
         try:
             logger.info(f"Starting training with {epochs} epochs, batch size {batch_size}")
+
+            # Ensure input data is a numeric numpy array with proper dtype
+            data = np.asarray(data, dtype=np.float32)
             
             # Prepare callbacks
             if callbacks_list is None:
@@ -272,10 +281,10 @@ class LSTMAutoencoder:
         if not self.is_trained:
             raise ValueError("Model must be trained before decoding")
         
-        # Reshape if necessary
-        if len(encoded_data.shape) == 2:
+        # Reshape if necessary: if a single 1D vector is provided, make it a batch
+        if len(encoded_data.shape) == 1:
             encoded_data = encoded_data.reshape(1, -1)
-        
+
         return self.decoder.predict(encoded_data)
     
     def reconstruct(self, data):

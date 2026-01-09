@@ -151,32 +151,47 @@ class AnomalyDetector:
                                       threshold: float) -> Dict[str, Any]:
         """Anomaly detection based on LSTM reconstruction error"""
         try:
-            # Get reconstruction error
-            reconstruction_error = model.get_reconstruction_error(data)
-            
+            # Get full reconstructions
+            reconstructed = model.reconstruct(data)
+
+            # Compute reconstruction error per timestep (mean squared error across features)
+            # resulting shape: (samples, timesteps)
+            error_per_timestep = np.mean(np.square(data - reconstructed), axis=2)
+
+            # Also compute per-sample mean error for compatibility
+            reconstruction_error = np.mean(error_per_timestep, axis=1)
+
             # Calculate threshold (can be adaptive)
             if isinstance(threshold, str) and threshold == 'adaptive':
-                threshold = np.percentile(reconstruction_error, 95)
-            
-            # Detect anomalies
-            anomaly_mask = reconstruction_error > threshold
-            anomaly_indices = np.where(anomaly_mask)[0]
-            
-            # Calculate anomaly scores (normalized)
-            anomaly_scores = (reconstruction_error - np.min(reconstruction_error)) / \
-                           (np.max(reconstruction_error) - np.min(reconstruction_error))
-            
+                threshold = float(np.percentile(reconstruction_error, 95))
+
+            # If threshold is a scalar, apply to timestep errors
+            thresh_val = float(threshold)
+
+            # Detect anomalies per timestep
+            anomaly_mask = error_per_timestep > thresh_val
+            anomaly_indices = np.where(anomaly_mask.flatten())[0]
+
+            # Calculate anomaly scores (normalized per-timestep)
+            min_err = np.min(error_per_timestep)
+            max_err = np.max(error_per_timestep)
+            if max_err > min_err:
+                anomaly_scores = (error_per_timestep - min_err) / (max_err - min_err)
+            else:
+                anomaly_scores = np.zeros_like(error_per_timestep)
+
             results = {
                 'method': 'reconstruction',
-                'anomaly_mask': anomaly_mask,
+                'anomaly_mask': anomaly_mask.tolist(),
                 'anomaly_indices': anomaly_indices.tolist(),
                 'anomaly_scores': anomaly_scores.tolist(),
                 'reconstruction_error': reconstruction_error.tolist(),
-                'threshold': float(threshold),
+                'reconstruction_error_timestep': error_per_timestep.tolist(),
+                'threshold': float(thresh_val),
                 'n_anomalies': int(np.sum(anomaly_mask)),
                 'anomaly_ratio': float(np.mean(anomaly_mask))
             }
-            
+
             return results
             
         except Exception as e:

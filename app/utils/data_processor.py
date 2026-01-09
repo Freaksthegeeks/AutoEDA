@@ -213,9 +213,16 @@ class DataProcessor:
             
             # Scale numeric variables
             df_scaled = self._scale_numeric_variables(df_encoded, config)
-            
-            # Prepare sequences for LSTM
-            sequences = self._prepare_sequences(df_scaled, config)
+
+            # Ensure we only keep numeric columns for sequence modeling
+            df_numeric = df_scaled.select_dtypes(include=[np.number]).copy()
+            if df_numeric.shape[1] == 0:
+                # Attempt to coerce all columns to numeric (fallback)
+                df_numeric = df_scaled.apply(lambda col: pd.to_numeric(col, errors='coerce'))
+                df_numeric = df_numeric.fillna(0)
+
+            # Prepare sequences for LSTM using numeric-only dataframe
+            sequences = self._prepare_sequences(df_numeric, config)
             
             # Split data
             train_data, validation_data = self._split_data(sequences, config)
@@ -225,7 +232,7 @@ class DataProcessor:
                 'train_data': train_data,
                 'validation_data': validation_data,
                 'input_shape': sequences.shape[1:],
-                'feature_names': df_scaled.columns.tolist(),
+                'feature_names': df_numeric.columns.tolist(),
                 'preprocessing_info': {
                     'scalers': {k: str(v) for k, v in self.scalers.items()},
                     'encoders': {k: str(v) for k, v in self.label_encoders.items()},
@@ -343,8 +350,8 @@ class DataProcessor:
     
     def _prepare_sequences(self, df: pd.DataFrame, config: Dict[str, Any]) -> np.ndarray:
         """Prepare sequences for LSTM analysis"""
-        # Convert to numpy array
-        data = df.values
+        # Convert to numpy array (ensure numeric float32 dtype)
+        data = df.to_numpy(dtype=np.float32)
         
         # Get sequence parameters
         sequence_length = config.get('sequence_length', 10)
@@ -356,7 +363,8 @@ class DataProcessor:
             sequence = data[i:i + sequence_length]
             sequences.append(sequence)
         
-        sequences = np.array(sequences)
+        # Ensure sequences are numeric float32 for Keras
+        sequences = np.array(sequences, dtype=np.float32)
         
         logger.info(f"Created {len(sequences)} sequences with length {sequence_length}")
         return sequences

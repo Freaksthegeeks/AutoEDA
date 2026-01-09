@@ -111,7 +111,7 @@ def analyze_data():
         _t0 = _time.time()
         training_history = lstm_model.train(
             processed_data['train_data'],
-            epochs=analysis_config.get('epochs', 50),
+            epochs=analysis_config.get('epochs', Config.DEFAULT_EPOCHS),
             batch_size=analysis_config.get('batch_size', 32)
         )
         training_duration = float(_time.time() - _t0)

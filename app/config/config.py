@@ -40,7 +40,7 @@ class Config:
     }
     
     # Training settings
-    DEFAULT_EPOCHS = 50
+    DEFAULT_EPOCHS = 10
     DEFAULT_BATCH_SIZE = 32
     VALIDATION_SPLIT = 0.2
     EARLY_STOPPING_PATIENCE = 10
